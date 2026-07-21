@@ -24,7 +24,7 @@ ZIPS=(
     "1U2Lx7C60gnC9REaJobkBmLk3KeOXJAlg:assets.zip"              # day2/day3 YCB 에셋 -> data/assets/
     "1KtkR46L-ZlPS5KAeujb8FhfPA6EFnCes:checkpoint.zip"          # cgnet + SAM3 체크포인트 -> data/checkpoint/
     "1ESUhUw3F39mbOeK2eFudkJAWRupB6bHK:handeye_data.zip"        # day1_4.3.1/4.3.2 -> data/handeye_data/
-    "1nkcGLrhSHaLJfohDAIcYT_wo0tGZdb9d:slam_map_data.zip"       # day1_4.3.3 -> data/slam_map_data/
+    "1nFmfcubM0Su2aa-08BPNx7z5SWES4aBg:slam_map_data.zip"       # day1_4.3.3 -> data/slam_map_data/
     "1oS9YpR__J8qD60Mv9VOYQi5WH8w6h476:PennFudanPed.zip"        # day1 객체 검출 -> data/PennFudanPed/
     "1ttTD9ZaWo7F-OWi9Y-_kaS1T-5h1gYpy:sam3_practice.zip"       # day2 SAM3 예제 입력 -> data/sam3_practice/
 )
