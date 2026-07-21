@@ -1,0 +1,17 @@
+.git
+.gitmodules
+.vscode
+**/__pycache__
+**/*.pyc
+
+# These are created inside dedicated Docker layers by setup_docker.sh.
+data
+!day3/data/
+!day3/data/**
+src
+day3/robomimic
+day3/datasets
+
+# Local transfer/archive artifacts are not part of the image.
+docker.zip
+*.hdf5

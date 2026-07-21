@@ -1,0 +1,13 @@
+data/*
+*.hdf5
+*/__pycache__/*
+*.pyc
+src/*
+day1/data
+*.pth
+*.pt
+checkpoints/
+day3/datasets/*
+data/*.json
+data/*.png
+data/sam3_practice_outputs/
