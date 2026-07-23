@@ -187,6 +187,7 @@ def restore_state_and_render(env: ManagerBasedEnv, state, env_ids: torch.Tensor)
     env.scene.reset_to(state, env_ids=env_ids, is_relative=True)
     env.sim.forward()
     env.sim.render()
+    env.scene.update(env.physics_dt)
     return env.observation_manager.compute_group("policy", update_history=False)
 
 
