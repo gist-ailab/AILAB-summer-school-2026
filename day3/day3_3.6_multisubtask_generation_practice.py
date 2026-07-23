@@ -78,37 +78,58 @@ def gripper_values(demo) -> np.ndarray:
 
 # object가 충분히 들어올려진 첫 step을 lift boundary로 추정합니다.
 def estimate_lift_step(demo, lift_height: float = 0.18) -> int | None:
-    # [문제 6-1] object z 높이 기반 object_lifted boundary를 추정하세요.
-    # 힌트: gripper close 이후, base-frame object z가 lift_height를 넘는 첫 index를 찾습니다.
-    raise NotImplementedError("문제 6-1: object height 기반 lifted boundary를 추정하세요.")
+    obj = object_xyz(demo)
+    close_step = estimate_gripper_close_step(demo)
+    start = 0 if close_step is None else close_step
+    hits = np.flatnonzero(obj[start:, 2] > lift_height)
+    return int(start + hits[0]) if hits.size > 0 else None
 
 
 # EEF와 object가 가까워진 첫 step을 approach boundary로 추정합니다.
 def estimate_approach_step(demo, threshold: float = 0.07) -> int | None:
-    # [문제 6-2] EEF-object 거리 기반 approach_done boundary를 추정하세요.
-    # 힌트: EEF target position과 object position의 xy 거리.
-    raise NotImplementedError("문제 6-2: EEF-object 거리 기반 approach boundary를 추정하세요.")
+    # [문제 6] EEF-object xy 거리식만 채우세요.
+    dist = ____  # 빈칸 1: target EEF와 object의 xy distance
+    hits = np.flatnonzero(dist < threshold)
+    return int(hits[0]) if hits.size > 0 else int(np.argmin(dist))
 
 
 # gripper command가 닫힘으로 바뀌는 첫 step을 close boundary로 추정합니다.
 def estimate_gripper_close_step(demo) -> int | None:
-    # [문제 6-3] gripper action 기반 gripper_closed boundary를 추정하세요.
-    # 힌트: gripper 값이 음수가 되는 첫 index.
-    raise NotImplementedError("문제 6-3: gripper close boundary를 추정하세요.")
+    grip = gripper_values(demo)
+    hits = np.flatnonzero(grip < 0.0)
+    return int(hits[0]) if hits.size > 0 else None
 
 
 # object와 bin이 가까워진 첫 step을 place 접근 boundary로 추정합니다.
 def estimate_near_bin_step(demo, threshold: float = 0.13) -> int | None:
-    # [문제 6-4] object-bin 거리 기반 object_near_bin boundary를 추정하세요.
-    # 힌트: object와 bin의 xy 거리.
-    raise NotImplementedError("문제 6-4: object-bin 거리 기반 near-bin boundary를 추정하세요.")
+    obj = object_xyz(demo)
+    goal = bin_xyz(demo)
+    dist = np.linalg.norm(obj[:, :2] - goal[:, :2], axis=1)
+    lift_step = estimate_lift_step(demo)
+    start = 0 if lift_step is None else lift_step
+    hits = np.flatnonzero(dist[start:] < threshold)
+    return int(start + hits[0]) if hits.size > 0 else None
 
 
 # 여러 subtask boundary가 시간 순서대로 증가하도록 보정합니다.
 def monotonic_transition_steps(length: int, raw_steps: list[int | None], min_gap: int = 2) -> list[int]:
-    # [문제 6-5] 여러 boundary가 시간 순서대로 증가하도록 보정하세요.
-    # 힌트: None은 fallback으로 바꾸고, 각 step은 이전 step보다 min_gap 이상 커야 합니다.
-    raise NotImplementedError("문제 6-5: multi-subtask boundary 순서를 보정하세요.")
+    # 경계 후보 생성은 제공하며, 허용 범위로 제한하는 한 줄만 채우세요.
+    if length <= len(raw_steps) * min_gap + 1:
+        min_gap = 1
+    out = []
+    prev = 0
+    n = len(raw_steps)
+    for i, raw in enumerate(raw_steps):
+        fallback = int(round((i + 1) * length / (n + 1)))
+        step = fallback if raw is None else int(raw)
+        min_allowed = prev + min_gap
+        max_allowed = length - 1 - (n - i - 1) * min_gap
+        if max_allowed < min_allowed:
+            max_allowed = min_allowed
+        step = ____  # 빈칸 2: step을 min_allowed~max_allowed로 제한
+        out.append(step)
+        prev = step
+    return out
 
 
 # 지정 step부터 1이 되는 0/1 subtask termination signal을 만듭니다.

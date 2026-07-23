@@ -79,9 +79,9 @@ def transform_source_data_segment_using_object_pose(
     src_eef_poses: np.ndarray,
     src_obj_pose: np.ndarray,
 ) -> np.ndarray:
-    # [문제 3-1] source EEF trajectory를 source object 기준으로 바꾼 뒤,
-    # 새 object pose 기준 world trajectory로 되돌리세요.
-    raise NotImplementedError("문제 3-1: T_obj_new @ inv(T_obj_src) @ T_eef_src 를 구현하세요.")
+    # [문제 3] object-centric 변환식의 두 항만 채우세요.
+    src_eef_poses_rel_obj = ____ @ src_eef_poses  # 빈칸 1: source object pose의 inverse
+    return ____ @ src_eef_poses_rel_obj  # 빈칸 2: 새 object pose
 
 
 # z축 yaw 회전을 4x4 pose matrix로 만듭니다.
@@ -124,9 +124,26 @@ def first_motion_step(target_poses: np.ndarray, threshold: float = 1.0e-4) -> in
 
 # HDF5 첫 demo에서 object-centric 접근 segment를 잘라옵니다.
 def load_first_approach_segment(hdf5_file: str) -> dict[str, np.ndarray | dict]:
-    # [문제 3-2] HDF5 첫 demo에서 initial state, object pose, target EEF pose, gripper를 읽고
-    # T-bar에 접근하는 구간, 즉 첫 gripper close 직전까지만 잘라 segment dict로 반환하세요.
-    raise NotImplementedError("문제 3-2: mimic-ready HDF5에서 첫 접근 segment를 읽으세요.")
+    # HDF5 segment 추출 boilerplate는 제공됩니다.
+    with h5py.File(hdf5_file, "r") as f:
+        demo_name = first_demo_name(f["data"])
+        demo = f[f"data/{demo_name}"]
+        target_poses = demo[f"obs/datagen_info/target_eef_pose/{EEF_NAME}"][:].astype(np.float32)
+        object_poses = demo["obs/datagen_info/object_pose/object_0"][:].astype(np.float32)
+        gripper = demo[f"obs/datagen_info/gripper_action/{EEF_NAME}"][:].reshape(-1).astype(np.float32)
+    start = first_motion_step(target_poses)
+    close_hits = np.flatnonzero(gripper < 0.0)
+    close_step = int(close_hits[0]) if close_hits.size else len(target_poses)
+    end = int(np.clip(close_step + args_cli.approach_extra_steps, start + 2, len(target_poses)))
+    with h5py.File(hdf5_file, "r") as f:
+        states_start = load_state_step(f[f"data/{demo_name}/states"], start)
+    return {
+        "demo_name": demo_name,
+        "initial_state": states_start,
+        "src_obj_pose": object_poses[start],
+        "src_eef_poses": target_poses[start:end],
+        "gripper": gripper[start:end],
+    }
 
 
 # source object pose를 기준으로 새 T-bar 위치와 yaw를 샘플링합니다.
@@ -147,8 +164,12 @@ def move_state_to_device(state, device: str):
 
 # reset_to state 안의 T-bar root pose를 새 object pose로 교체합니다.
 def set_object_pose_in_state(state: dict, obj_pose: np.ndarray) -> None:
-    # [문제 3-3] reset할 state 안의 T-bar root_pose를 새 object pose로 교체하세요.
-    raise NotImplementedError("문제 3-3: state['rigid_object']['object_0']['root_pose']에 새 위치/자세를 넣으세요.")
+    # Reset state 수정 boilerplate는 제공됩니다.
+    root_pose = state["rigid_object"]["object_0"]["root_pose"]
+    tabletop_pos = obj_pose[:3, 3].copy()
+    tabletop_pos[2] += TABLE_TOP_Z
+    root_pose[0, :3] = torch.as_tensor(tabletop_pos, dtype=root_pose.dtype)
+    root_pose[0, 3:7] = torch.as_tensor(matrix_to_quat_wxyz(obj_pose[:3, :3]), dtype=root_pose.dtype)
 
 
 # 4x4 target EEF pose를 IK action 벡터로 변환합니다.

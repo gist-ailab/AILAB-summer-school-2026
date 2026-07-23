@@ -333,9 +333,14 @@ def resolve_input_file(path: str) -> str:
 
 # HDF5에 저장된 특정 step의 simulator state를 reset_to 입력으로 읽습니다.
 def load_state_step(group: h5py.Group, step: int, device: str):
-    # [문제 2.2-1] HDF5 states group에서 step번째 상태를 IsaacLab reset_to 형식으로 변환하세요.
-    # Dataset은 item[step]을 tensor로 만들고 batch 차원을 추가합니다. Group은 재귀적으로 dict를 만듭니다.
-    raise NotImplementedError("문제 2.2-1: HDF5 state를 reset_to용 nested dict로 변환하세요.")
+    # 문제 2.1에서 구현한 state tree 변환은 제공됩니다.
+    state = {}
+    for key, item in group.items():
+        if isinstance(item, h5py.Dataset):
+            state[key] = torch.as_tensor(item[step], device=device).unsqueeze(0)
+        else:
+            state[key] = load_state_step(item, step, device)
+    return state
 
 
 # state replay와 mimic datagen_info 기록을 위한 환경과 recorder를 생성합니다.
@@ -354,8 +359,12 @@ def make_env(output_file: str) -> ManagerBasedEnv:
 
 # 저장된 simulator state를 복원한 뒤 카메라 관측을 다시 계산합니다.
 def restore_state_and_render(env: ManagerBasedEnv, state, env_ids: torch.Tensor):
-    # [문제 2.2-2] 저장된 state를 시뮬레이터에 복원하고 카메라 관측을 다시 렌더링하세요.
-    raise NotImplementedError("문제 2.2-2: env.scene.reset_to + sim.forward/render + policy obs 계산을 작성하세요.")
+    # 문제 1.1에서 구현한 state re-render 패턴은 제공됩니다.
+    env.scene.reset_to(state, env_ids=env_ids, is_relative=True)
+    env.sim.forward()
+    env.scene.update(env.physics_dt)
+    env.sim.render()
+    return env.observation_manager.compute_group("policy", update_history=False)
 
 
 # torch tensor를 recorder에 저장 가능한 CPU numpy array로 변환합니다.
@@ -365,9 +374,24 @@ def tensor_to_numpy(tensor: torch.Tensor):
 
 # 현재 end-effector pose를 4x4 matrix로 읽습니다.
 def current_eef_pose_matrix(env: ManagerBasedEnv) -> torch.Tensor:
-    # [문제 2.2-3] 현재 EE frame을 4x4 pose matrix로 저장하세요.
-    # 힌트: ee_frame.data.target_pos_w/target_quat_w를 env origin 기준으로 바꿉니다.
-    raise NotImplementedError("문제 2.2-3: 현재 eef_pose를 4x4 matrix로 변환하세요.")
+    # TCP pose 추출 boilerplate는 제공됩니다.
+    arm_cfg = env.cfg.actions.arm_action
+    robot = env.scene[arm_cfg.asset_name]
+    body_ids, body_names = robot.find_bodies(arm_cfg.body_name)
+    if len(body_ids) != 1:
+        raise RuntimeError(f"body_name={arm_cfg.body_name!r} matched {body_names}")
+    body_index = body_ids[0]
+    pos, quat = math_utils.subtract_frame_transforms(
+        robot.data.root_pos_w,
+        robot.data.root_quat_w,
+        robot.data.body_pos_w[:, body_index],
+        robot.data.body_quat_w[:, body_index],
+    )
+    if arm_cfg.body_offset is not None:
+        offset_pos = torch.tensor(arm_cfg.body_offset.pos, dtype=torch.float32, device=env.device).unsqueeze(0)
+        offset_quat = torch.tensor(arm_cfg.body_offset.rot, dtype=torch.float32, device=env.device).unsqueeze(0)
+        pos, quat = math_utils.combine_frame_transforms(pos, quat, offset_pos, offset_quat)
+    return pose7_to_matrix(pos, quat, env.num_envs, "eef_pose")
 
 
 # 현재 rigid object pose를 4x4 matrix로 읽습니다.
@@ -420,10 +444,19 @@ def replay_to_mimic_ready(input_file: str, output_file: str, num_demos: int) -> 
             t0 = time.perf_counter()
 
             for step, action_np in enumerate(actions):
-                # [문제 2.2-4] 매 step마다 state를 복원하고 obs/datagen_info에 넣을 값을 append하세요.
-                # 필요한 항목: top_cam, wrist_cam, eef_pose, target_eef_pose, object_0 pose, bin pose,
-                # gripper_action과 object_lifted signal을 함께 누적합니다.
-                raise NotImplementedError("문제 2.2-4: state replay로 카메라와 datagen_info 항목을 누적하세요.")
+                # [문제 2.2] 같은 step의 실제 EEF pose와 Action target pose 두 곳만 채우세요.
+                state = load_state_step(src_demo["states"], step, env.device)
+                obs = restore_state_and_render(env, state, env_ids)
+                top_frames.append(tensor_to_numpy(obs["top_cam"][0]))
+                wrist_frames.append(tensor_to_numpy(obs["wrist_cam"][0]))
+
+                obj_pos = env.scene["object_0"].data.root_pos_w - env.scene.env_origins
+                eef_poses.append(____)  # 빈칸 1: current_eef_pose_matrix 결과를 CPU numpy로
+                target_poses.append(____)  # 빈칸 2: action_np의 target pose를 CPU numpy로
+                object_poses.append(tensor_to_numpy(current_object_pose_matrix(env, "object_0")[0]))
+                bin_poses.append(tensor_to_numpy(current_object_pose_matrix(env, "bin")[0]))
+                gripper_actions.append(np.asarray([action_np[7]], dtype=np.float32))
+                object_lifted.append(np.asarray([float(obj_pos[0, 2] > 0.68)], dtype=np.float32))
 
                 if (step + 1) % 100 == 0:
                     print(f"[STATE-REPLAY] {demo_name}: {step + 1}/{num_steps}", flush=True)

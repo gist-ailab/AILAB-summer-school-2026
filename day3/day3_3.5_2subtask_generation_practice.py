@@ -82,9 +82,12 @@ def estimate_gripper_close_step(demo) -> int | None:
 
 # gripper close 이후 object가 충분히 들어올려진 첫 step을 lift boundary로 추정합니다.
 def estimate_lift_step(demo, lift_height: float = 0.18) -> int | None:
-    # [문제 5-1] object z trajectory를 보고 물체가 들어올려진 첫 step을 추정하세요.
-    # 힌트: gripper close 이후, base-frame object z가 lift_height를 넘는 첫 index를 찾습니다.
-    raise NotImplementedError("문제 5-1: object height 기반 lifted boundary를 추정하세요.")
+    # [문제 5] lift 조건식 한 곳만 채우세요.
+    obj = object_xyz(demo)
+    close_step = estimate_gripper_close_step(demo)
+    start = 0 if close_step is None else close_step
+    hits = np.flatnonzero(____)  # 빈칸 1: close 이후 object z > lift_height
+    return int(start + hits[0]) if hits.size > 0 else None
 
 
 # subtask 경계 index가 episode 범위 안에 들어오도록 보정합니다.
@@ -148,9 +151,14 @@ def create_2subtask_source(input_file: str, output_file: str, num_demos: int = 0
             demo = f[f"data/{name}"]
             assert_mimic_ready(demo, name)
             length = int(demo["actions"].shape[0])
-            # [문제 5-2] 추정한 lifted step을 0->1 signal로 저장하세요.
-            # 힌트: estimate_lift_step -> valid_transition_step -> step_signal -> recreate_h5_dataset.
-            raise NotImplementedError("문제 5-2: object_lifted_from_height signal dataset을 생성하세요.")
+            raw_step = estimate_lift_step(demo)
+            step = valid_transition_step(length, raw_step)
+            signals = demo.require_group("obs/datagen_info/subtask_term_signals")
+            recreate_h5_dataset(
+                signals,
+                "object_lifted_from_height",
+                ____,  # 빈칸 2: boundary step을 0→1 signal로 변환
+            )
             ref = first_transition(signals["object_lifted"][:]) if "object_lifted" in signals else None
             demo.attrs["subtask_summary"] = json.dumps({
                 "mode": "2subtask",

@@ -72,8 +72,14 @@ def resolve_input_file(path: str) -> str:
 
 # HDF5에 저장된 특정 step의 simulator state를 reset_to 입력으로 읽습니다.
 def load_state_step(group: h5py.Group, step: int, device: str):
-    # [문제 2.1-1] HDF5 states tree를 env.reset_to()용 nested tensor dict로 변환하세요.
-    raise NotImplementedError("문제 2.1-1: HDF5 state tree를 reset_to 입력으로 변환하세요.")
+    # [문제 2.1-1] Dataset을 batch tensor로 바꾸는 한 줄만 채우세요.
+    state = {}
+    for key, item in group.items():
+        if isinstance(item, h5py.Dataset):
+            state[key] = ____  # 빈칸 1: item[step] -> device tensor -> batch 축 추가
+        else:
+            state[key] = load_state_step(item, step, device)
+    return state
 
 
 # PickPlace action replay에 사용할 IK action 환경과 recorder를 생성합니다.
@@ -117,8 +123,16 @@ def replay_actions(input_file: str, output_file: str, num_demos: int) -> None:
     with h5py.File(input_file, "r") as src:
         for demo_index, demo_name in enumerate(selected_demo_names(src["data"], num_demos), start=1):
             demo = src[f"data/{demo_name}"]
-            # [문제 2.1-2] demo 첫 state로 reset한 뒤 actions를 순서대로 env.step()에 넣으세요.
-            raise NotImplementedError("문제 2.1-2: initial state reset + action replay loop를 작성하세요.")
+            # [문제 2.1-2] 첫 state를 읽는 함수와 Action 실행 API만 채우세요.
+            initial_state = ____(demo["states"], 0, env.device)  # 빈칸 2
+            env.reset_to(
+                initial_state,
+                env_ids=torch.tensor([0], dtype=torch.long, device=env.device),
+                is_relative=True,
+            )
+            for action_np in demo["actions"]:
+                action = torch.as_tensor(action_np, dtype=torch.float32, device=env.device).unsqueeze(0)
+                env.____(action)  # 빈칸 3: Action을 simulator에 적용
             count = export_current_episode(env)
             print(f"[EXPORT] {demo_name} -> replay_demo_{count - 1} ({demo_index})", flush=True)
     env.close()

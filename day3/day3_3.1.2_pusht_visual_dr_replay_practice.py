@@ -128,8 +128,17 @@ def set_dome_light(stage, path: str, color: tuple[float, float, float], intensit
 
 # 한 episode/copy에 적용할 색상과 조명 값을 무작위로 샘플링합니다.
 def sample_visual_style(rng: random.Random) -> dict[str, object]:
-    # [문제 1.2] episode마다 적용할 색/조명 randomization 값을 반환하세요.
-    raise NotImplementedError("문제 1.2: visual style dictionary를 반환하세요.")
+    # [문제 1.2] 물체의 red 범위와 조명 세기 범위만 정하세요.
+    object_red_range = ____  # 빈칸 1: 예) (0.55, 1.0)
+    light_intensity_range = ____  # 빈칸 2: 예) (1800.0, 4200.0)
+    return {
+        "object_color": (rng.uniform(*object_red_range), rng.uniform(0.02, 0.30), rng.uniform(0.02, 0.30)),
+        "target_color": (rng.uniform(0.02, 0.30), rng.uniform(0.55, 1.0), rng.uniform(0.02, 0.30)),
+        "table_color": tuple(rng.uniform(0.35, 0.90) for _ in range(3)),
+        "ground_color": tuple(rng.uniform(0.45, 0.90) for _ in range(3)),
+        "light_color": tuple(rng.uniform(0.75, 1.00) for _ in range(3)),
+        "light_intensity": rng.uniform(*light_intensity_range),
+    }
 
 
 # PushT scene에서 색을 바꿀 object/table/ground/light prim들을 미리 찾습니다.

@@ -439,11 +439,14 @@ def make_mimic_env(output_file: str):
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device
     env_cfg.sim.use_fabric = True
-    # [문제 4-1] DataGenerator가 success term을 따로 평가할 수 있도록 env cfg에서 분리하세요.
-    # 힌트: success_term을 저장한 뒤 env_cfg.terminations.success/time_out을 비웁니다.
-    # [문제 4-2] generated rollout을 HDF5로 저장할 CPU recorder를 설정하세요.
-    # 힌트: CpuActionStateRecorderManagerCfg + DatasetExportMode.EXPORT_SUCCEEDED_ONLY.
-    raise NotImplementedError("문제 4-1/4-2: success term 분리와 generated dataset recorder 설정을 작성하세요.")
+    # [문제 4] DataGenerator가 사용할 success term과 recorder mode만 채우세요.
+    success_term = ____  # 빈칸 1: env cfg에 정의된 success term
+    env_cfg.terminations.success = None
+    env_cfg.terminations.time_out = None
+    env_cfg.recorders = CpuActionStateRecorderManagerCfg()
+    env_cfg.recorders.dataset_export_dir_path = str(output.parent)
+    env_cfg.recorders.dataset_filename = output.stem
+    env_cfg.recorders.dataset_export_mode = ____  # 빈칸 2: 성공 episode만 저장
     env = gym.make(TASK_ID, cfg=env_cfg).unwrapped
     env.reset()
     env.sim.set_camera_view(eye=[1.5, 1.5, 1.5], target=[0.0, 0.0, 0.5])
@@ -463,9 +466,46 @@ def cancel_generation_tasks(setup: dict) -> None:
 
 # DataGenerator action queue를 env.step에 연결해 generation이 끝날 때까지 rollout합니다.
 def env_loop_until_done(env, setup: dict) -> None:
-    # [문제 4-3] DataGenerator가 action_queue에 넣은 action을 env.step()으로 실행하세요.
-    # reset_queue 처리, action_queue 수집, 성공 개수 확인이 핵심입니다.
-    raise NotImplementedError("문제 4-3: DataGenerator action queue를 IsaacLab rollout loop에 연결하세요.")
+    reset_queue = setup["reset_queue"]
+    action_queue = setup["action_queue"]
+    loop = setup["event_loop"]
+    env_id_tensor = torch.tensor([0], dtype=torch.int64, device=env.device)
+    prev_attempts = 0
+    if args_cli.visualize_subtasks:
+        for env_id in range(env.num_envs):
+            set_subtask_marker(env, env_id, SUBTASK_DEBUG_COLORS["reset"])
+    try:
+        with contextlib.suppress(KeyboardInterrupt), torch.inference_mode():
+            while True:
+                while action_queue.qsize() != env.num_envs:
+                    loop.run_until_complete(asyncio.sleep(0))
+                    while not reset_queue.empty():
+                        env_id_tensor[0] = reset_queue.get_nowait()
+                        reset_env_id = int(env_id_tensor[0].item())
+                        env.reset(env_ids=env_id_tensor)
+                        if args_cli.visualize_subtasks:
+                            set_subtask_marker(env, reset_env_id, SUBTASK_DEBUG_COLORS["reset"])
+                        reset_queue.task_done()
+
+                actions = torch.zeros(env.action_space.shape, device=env.device)
+                for _ in range(env.num_envs):
+                    env_id, action = loop.run_until_complete(action_queue.get())
+                    actions[env_id] = action.to(env.device)
+                env.____(actions)  # 빈칸 3: queue의 Action을 physics에 적용
+                if args_cli.visualize_subtasks:
+                    update_subtask_debug_visual(env)
+                for _ in range(env.num_envs):
+                    action_queue.task_done()
+
+                if prev_attempts != mimic_generation.num_attempts:
+                    prev_attempts = mimic_generation.num_attempts
+                    rate = 100 * mimic_generation.num_success / mimic_generation.num_attempts if mimic_generation.num_attempts else 0.0
+                    print(f"[MIMIC] {mimic_generation.num_success}/{mimic_generation.num_attempts} ({rate:.1f}%)", flush=True)
+                if mimic_generation.num_success >= env.cfg.datagen_config.generation_num_trials:
+                    break
+    finally:
+        cancel_generation_tasks(setup)
+        env.close()
 
 
 # source HDF5를 setup_async_generation에 연결하고 목표 성공 개수까지 실행합니다.
@@ -474,8 +514,20 @@ def env_loop_until_done(env, setup: dict) -> None:
 # ============================================================================
 # isaaclab_mimic DataGenerator rollout 실습 파이프라인을 실행합니다.
 def main() -> None:
-    # [문제 4-4] source HDF5를 setup_async_generation()에 넘기고 rollout loop를 실행하세요.
-    raise NotImplementedError("문제 4-4: source HDF5 -> setup_async_generation -> rollout 흐름을 작성하세요.")
+    # Source 연결과 비동기 setup boilerplate는 제공됩니다.
+    source_file = Path(args_cli.annotated_file)
+    if not source_file.exists():
+        raise FileNotFoundError(f"Source HDF5 not found: {source_file}. Run problem 2, 5, or 6 first.")
+    register_env()
+    env, success_term = make_mimic_env(args_cli.output_file)
+    setup = setup_async_generation(
+        env=env,
+        num_envs=args_cli.num_envs,
+        input_file=str(source_file),
+        success_term=success_term,
+        pause_subtask=False,
+    )
+    env_loop_until_done(env, setup)
 
 
 if __name__ == "__main__":

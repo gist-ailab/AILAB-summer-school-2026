@@ -81,8 +81,12 @@ def h5_tree_to_torch(item, device: str, step: int | None = None):
 
 # 저장된 simulator state를 복원한 뒤 카메라 관측을 다시 계산합니다.
 def restore_state_and_render(env: ManagerBasedEnv, state, env_ids: torch.Tensor):
-    # [문제 1.1] 저장된 simulator state를 복원하고 policy camera observation을 다시 계산하세요.
-    raise NotImplementedError("문제 1.1: state restore + camera re-render를 구현하세요.")
+    # [문제 1.1] 핵심 API 두 곳만 채우세요.
+    env.scene.____(state, env_ids=env_ids, is_relative=True)  # 빈칸 1: 저장 state 복원
+    env.sim.forward()
+    env.sim.render()
+    env.scene.update(env.physics_dt)
+    return env.observation_manager.____("policy", update_history=False)  # 빈칸 2: policy 관측 계산
 
 
 # PushT re-render에 사용할 카메라 포함 환경을 생성합니다.
