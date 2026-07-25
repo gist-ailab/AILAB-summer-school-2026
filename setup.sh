@@ -86,36 +86,68 @@ download_single() {
     return 1
 }
 
+# $DP_CKPT_MARKER 아래에 하위 디렉토리가 있으면(=압축 해제 완료) 0 반환
+_ckpt_extracted() {
+    [ -d "$DP_CKPT_MARKER" ] && \
+        [ -n "$(find "$DP_CKPT_MARKER" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]
+}
+
+# 폴더 안에 받아진 zip(pickplace.zip, pusht.zip 등)들을 제자리에 해제.
+# zip 이 이미 자기 이름 폴더로 감싸져 있으면 그대로, 아니면 zip 이름 폴더로 감싼다.
+_unzip_inner_zips() {
+    shopt -s nullglob
+    local z base top
+    for z in "$DP_CKPT_MARKER"/*.zip; do
+        base="$(basename "${z%.zip}")"
+        top="$(unzip -Z1 "$z" 2>/dev/null | head -1 | cut -d/ -f1 || true)"
+        if [ "$top" = "$base" ]; then
+            echo "    압축 해제: $(basename "$z") -> $DP_CKPT_MARKER/"
+            unzip -qo "$z" -d "$DP_CKPT_MARKER"
+        else
+            echo "    압축 해제: $(basename "$z") -> $DP_CKPT_MARKER/$base/"
+            unzip -qo "$z" -d "$DP_CKPT_MARKER/$base"
+        fi
+        rm -f "$z"
+    done
+    shopt -u nullglob
+}
+
 # day3 학습 완료 체크포인트를 day3/robomimic/ 로 설치
 download_dp_ckpt() {
-    if [ -d "$DP_CKPT_MARKER" ]; then
+    if _ckpt_extracted; then
         echo "    재사용: $DP_CKPT_MARKER"
         return 0
     fi
     mkdir -p "$DP_CKPT_DIR"
     if [ -n "$CKPT_MIRROR_URL" ] || [ -n "$CKPT_ZIP_ID" ]; then
-        # 단일 zip 방식 (권장)
+        # 단일 zip 방식 (권장): zip 하나에 전체 트리(diffusion_policy_trained_models/...) 포함
         local zip="$ZIP_DIR/$CKPT_ZIP_NAME"
         download_single "$CKPT_ZIP_ID" "$zip" "$CKPT_MIRROR_URL" || return 1
         echo "    압축 해제: $CKPT_ZIP_NAME -> $DP_CKPT_DIR/"
         unzip -qo "$zip" -d "$DP_CKPT_DIR"
     else
-        # 폴더 방식 (폴백): gdown --folder 로 diffusion_policy_trained_models/ 를 통째로.
+        # 폴더 방식 (폴백): 폴더 안의 zip 들을 받아 각각 제자리 해제.
         echo "    폴더 다운로드(gdown --folder) — 동시성에 취약. 가능하면 CKPT_ZIP_ID/CKPT_MIRROR_URL 사용을 권장."
+        mkdir -p "$DP_CKPT_MARKER"
         _stagger
-        local attempt delay
+        local attempt delay ok=0
         for attempt in $(seq 1 "$DL_MAX_RETRY"); do
             echo "    gdown --folder (시도 $attempt/$DL_MAX_RETRY)"
+            # gdown --folder 는 이미 받은 파일은 건너뛰므로 재시도/재실행 시 이어받기 효과
             if gdown --folder "https://drive.google.com/drive/folders/$CKPT_FOLDER_ID" -O "$DP_CKPT_MARKER"; then
-                return 0
+                ok=1; break
             fi
             delay=$(( 2 ** attempt + RANDOM % 10 ))
             echo "    폴더 다운로드 실패. ${delay}s 후 재시도..."; sleep "$delay"
         done
-        echo "ERROR: 체크포인트 폴더 다운로드 실패"
-        echo "  Google Drive 쿼터일 수 있다. 잠시 후 다시 실행하거나 CKPT_MIRROR_URL(미러)을 설정하라."
-        return 1
+        if [ "$ok" -ne 1 ]; then
+            echo "ERROR: 체크포인트 폴더 다운로드 실패"
+            echo "  Google Drive 쿼터일 수 있다. 잠시 후 다시 실행하거나 CKPT_MIRROR_URL(미러)을 설정하라."
+            return 1
+        fi
+        _unzip_inner_zips
     fi
+    _ckpt_extracted || { echo "ERROR: 체크포인트 압축 해제 결과가 비어있다: $DP_CKPT_MARKER"; return 1; }
 }
 
 # 다운로드할 zip 들. "파일ID:파일명" 형식. 각 zip 은 unzip 시 data/<이름>/ 으로 풀린다.
@@ -200,7 +232,7 @@ for d in data/handeye_data data/slam_map_data data/sam3_practice; do
     [ -d "$d" ] || { echo "    누락: $d"; missing=1; }
 done
 [ -f "day3/datasets/$DAY3_DATASET_NAME" ] || { echo "    누락: day3/datasets/$DAY3_DATASET_NAME"; missing=1; }
-[ -d "$DP_CKPT_MARKER" ] || { echo "    누락: $DP_CKPT_MARKER"; missing=1; }
+_ckpt_extracted || { echo "    누락(또는 미해제): $DP_CKPT_MARKER"; missing=1; }
 
 if [ "$missing" -ne 0 ]; then
     echo

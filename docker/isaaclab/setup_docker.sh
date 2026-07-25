@@ -78,8 +78,34 @@ download_single() {
     return 1
 }
 
+# Extracted iff $DP_CKPT_MARKER has at least one subdirectory.
+_ckpt_extracted() {
+    [ -d "$DP_CKPT_MARKER" ] && \
+        [ -n "$(find "$DP_CKPT_MARKER" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]
+}
+
+# Unzip any zips fetched into the folder (pickplace.zip, pusht.zip, ...). If a zip
+# already wraps its own name dir keep it, otherwise wrap it under that name.
+_unzip_inner_zips() {
+    shopt -s nullglob
+    local z base top
+    for z in "$DP_CKPT_MARKER"/*.zip; do
+        base="$(basename "${z%.zip}")"
+        top="$(unzip -Z1 "$z" 2>/dev/null | head -1 | cut -d/ -f1 || true)"
+        if [ "$top" = "$base" ]; then
+            echo "    unzip: $(basename "$z") -> $DP_CKPT_MARKER/"
+            unzip -qo "$z" -d "$DP_CKPT_MARKER"
+        else
+            echo "    unzip: $(basename "$z") -> $DP_CKPT_MARKER/$base/"
+            unzip -qo "$z" -d "$DP_CKPT_MARKER/$base"
+        fi
+        rm -f "$z"
+    done
+    shopt -u nullglob
+}
+
 download_dp_ckpt() {
-    if [ -d "$DP_CKPT_MARKER" ]; then echo "    reuse: $DP_CKPT_MARKER"; return 0; fi
+    if _ckpt_extracted; then echo "    reuse: $DP_CKPT_MARKER"; return 0; fi
     mkdir -p "$DP_CKPT_DIR"
     if [ -n "$CKPT_MIRROR_URL" ] || [ -n "$CKPT_ZIP_ID" ]; then
         local zip="$ZIP_DIR/$CKPT_ZIP_NAME"
@@ -88,19 +114,24 @@ download_dp_ckpt() {
         unzip -qo "$zip" -d "$DP_CKPT_DIR"
     else
         echo "    folder download (gdown --folder) — fragile at scale; prefer CKPT_ZIP_ID/CKPT_MIRROR_URL"
+        mkdir -p "$DP_CKPT_MARKER"
         _stagger
-        local attempt delay
+        local attempt delay ok=0
         for attempt in $(seq 1 "$DL_MAX_RETRY"); do
             echo "    gdown --folder (try $attempt/$DL_MAX_RETRY)"
             if gdown --folder "https://drive.google.com/drive/folders/$CKPT_FOLDER_ID" -O "$DP_CKPT_MARKER"; then
-                return 0
+                ok=1; break
             fi
             delay=$(( 2 ** attempt + RANDOM % 10 ))
             echo "    folder download failed. retry in ${delay}s..."; sleep "$delay"
         done
-        echo "ERROR: checkpoint folder download failed (possible Drive quota; retry later or set CKPT_MIRROR_URL)"
-        return 1
+        if [ "$ok" -ne 1 ]; then
+            echo "ERROR: checkpoint folder download failed (possible Drive quota; retry later or set CKPT_MIRROR_URL)"
+            return 1
+        fi
+        _unzip_inner_zips
     fi
+    _ckpt_extracted || { echo "ERROR: checkpoint extraction produced no content: $DP_CKPT_MARKER"; return 1; }
 }
 
 # "파일ID:파일명". 각 zip 은 unzip 시 최상위에 자기 이름의 디렉토리를 갖는다 (-> data/<이름>/).
@@ -187,7 +218,7 @@ do_verify() {
     [ -d "data/PennFudanPed/PNGImages" ] || { echo "    MISSING: data/PennFudanPed/PNGImages"; missing=1; }
     for d in data/handeye_data data/slam_map_data data/sam3_practice; do [ -d "$d" ] || { echo "    MISSING: $d"; missing=1; }; done
     [ -f "day3/datasets/$DAY3_DATASET_NAME" ] || { echo "    MISSING: day3/datasets/$DAY3_DATASET_NAME"; missing=1; }
-    [ -d "$DP_CKPT_MARKER" ] || { echo "    MISSING: $DP_CKPT_MARKER"; missing=1; }
+    _ckpt_extracted || { echo "    MISSING (or not unzipped): $DP_CKPT_MARKER"; missing=1; }
     if [ "$missing" -ne 0 ]; then
         echo "데이터가 온전하지 않다. 직접 받아 data/ 에 배치할 것: $DRIVE_URL"
         exit 1
