@@ -119,6 +119,8 @@ import torch  # noqa: E402
 import carb
 carb.settings.get_settings().set_bool("/isaaclab/cameras_enabled", True)
 
+import day3_cpu_buffer_patch  # noqa: F401  GPU 텐서를 매 스탭 CPU로 즉시 이동 → VRAM 누적 방지
+
 import isaaclab.utils.math as math_utils  # noqa: E402
 from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg  # noqa: E402
 from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg  # noqa: E402

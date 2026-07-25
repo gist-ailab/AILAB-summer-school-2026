@@ -218,7 +218,7 @@ class EventCfg:
 @configclass
 class PushTEnvCfg(ManagerBasedEnvCfg):
     """PushT 환경 전체 설정 (Data Collection 및 Teleop용)"""
-    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=1, env_spacing=2.5)
     
     events: EventCfg = EventCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -231,8 +231,8 @@ class PushTEnvCfg(ManagerBasedEnvCfg):
         self.sim.render_interval = self.decimation
         
         self.sim.physx.bounce_threshold_velocity = 0.01
-        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
-        self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
+        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024  # 1M (reduced from 4M)
+        self.sim.physx.gpu_total_aggregate_pairs_capacity = 1024 * 1024       # 1M (was 16K → crash)
         self.sim.physx.friction_correlation_distance = 0.00625
 
         # 1. 로봇 세팅 (상단 ObjectTableSceneCfg에서 설정된 초기값을 사용합니다)

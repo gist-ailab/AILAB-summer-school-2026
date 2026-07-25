@@ -187,7 +187,7 @@ class TBarPickPlaceEnvCfg(ManagerBasedEnvCfg):
     """환경 전체 설정 (Data Collection 전용)"""
 
     # Scene 구성
-    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=4, env_spacing=2.5)
     
     # MDP 세팅
     events: EventCfg = EventCfg()
@@ -204,7 +204,9 @@ class TBarPickPlaceEnvCfg(ManagerBasedEnvCfg):
         self.sim.render_interval = self.decimation
         
         # PhysX 물리엔진 세부 튜닝
+        # NOTE: DGX Spark에서 crash 방지를 위해 GPU 버퍼 용량을 균형 있게 설정
+        # gpu_total_aggregate_pairs_capacity 가 너무 작으면 PhysX GPU overflow → 프로세스 강제 종료
         self.sim.physx.bounce_threshold_velocity = 0.01
-        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
-        self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
+        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024  # 1M (reduced from 4M)
+        self.sim.physx.gpu_total_aggregate_pairs_capacity = 1024 * 1024       # 1M (was 16K → crash)
         self.sim.physx.friction_correlation_distance = 0.00625

@@ -179,7 +179,7 @@ class TBarPickPlaceEnvCfg(ManagerBasedEnvCfg):
     """환경 전체 설정 (Data Collection 전용)"""
 
     # Scene 구성
-    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=4096, env_spacing=2.5)
+    scene: ObjectTableSceneCfg = ObjectTableSceneCfg(num_envs=4, env_spacing=2.5)
     
     # MDP 세팅
     events: EventCfg = EventCfg()
@@ -197,6 +197,6 @@ class TBarPickPlaceEnvCfg(ManagerBasedEnvCfg):
         
         # PhysX 물리엔진 세부 튜닝
         self.sim.physx.bounce_threshold_velocity = 0.01
-        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024 * 4
-        self.sim.physx.gpu_total_aggregate_pairs_capacity = 16 * 1024
+        self.sim.physx.gpu_found_lost_aggregate_pairs_capacity = 1024 * 1024  # 1M (reduced from 4M)
+        self.sim.physx.gpu_total_aggregate_pairs_capacity = 1024 * 1024       # 1M (was 16K → crash)
         self.sim.physx.friction_correlation_distance = 0.00625

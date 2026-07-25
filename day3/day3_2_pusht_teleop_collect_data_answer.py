@@ -120,6 +120,8 @@ from isaaclab.devices.teleop_device_factory import create_teleop_device
 import isaaclab_mimic.envs  # noqa: F401
 from isaaclab_mimic.ui.instruction_display import InstructionDisplay
 
+import day3_cpu_buffer_patch  # noqa: F401  GPU 텐서를 매 스탭 CPU로 즉시 이동 → VRAM 누적 방지
+
 if args_cli.enable_pinocchio:
     import isaaclab_tasks.manager_based.locomanipulation.pick_place  # noqa: F401
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
@@ -431,8 +433,9 @@ def run_simulation_loop(
 
             # 환경에 액션 적용
             if running_recording_instance:
-                # ManagerBasedEnv는 obv, extras를 리턴합니다 (RL 환경과 반환값 다름 주의)
-                obv, _ = env.step(actions)  
+                # ManagerBasedEnv는 (obs_dict, extras) 튜플을 리턴합니다.
+                # Isaac Lab 버전에 따라 반환 형태가 다를 수 있으므로 안전하게 단일 변수로 수령
+                _step_ret = env.step(actions)
             else:
                 env.sim.render()
 

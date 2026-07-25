@@ -41,6 +41,8 @@ import os
 import carb
 carb.settings.get_settings().set_bool("/isaaclab/cameras_enabled", True)
 
+import day3_cpu_buffer_patch  # noqa: F401  GPU 텐서를 매 스탭 CPU로 즉시 이동 → VRAM 누적 방지
+
 from task.lift.config.ik_abs_env_cfg_3_1_answer import FrankaTBarPickPlaceEnvCfg
 from task.lift.mdp_3_1.terminations import object_pickplace_goal
 from isaaclab.envs import ManagerBasedEnv

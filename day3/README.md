@@ -99,10 +99,11 @@ State Machine 기반으로 로봇이 사전 정의된 상태(REST → PREGRASP �
 #### 🔹 최종 완성본 실행
 
 ```bash
-"$ISAACLAB_PATH/isaaclab.sh" -p day3/day3_1_pickplace_statemachine_collect_data_answer.py \
+cd day3
+python day3_1_pickplace_statemachine_collect_data_answer.py \
     --num_envs 4 \
     --num_demos 50 \
-    --dataset_file day3/datasets/tbar_pickplace_statemachine_practice.hdf5
+    --dataset_file datasets/tbar_pickplace_statemachine_practice.hdf5
 ```
 
 **주요 인자**
@@ -123,9 +124,10 @@ State Machine 기반으로 로봇이 사전 정의된 상태(REST → PREGRASP �
 #### 🔹 최종 완성본 실행
 
 ```bash
-"$ISAACLAB_PATH/isaaclab.sh" -p day3/day3_1_pickplace_teleop_collect_data_answer.py \
+cd day3
+python day3_1_pickplace_teleop_collect_data_answer.py \
     --num_demos 50 \
-    --dataset_file day3/datasets/tbar_pickpalce_teleop_practice.hdf5 \
+    --dataset_file datasets/tbar_pickpalce_teleop_practice.hdf5 \
     --enable_cameras
 ```
 
@@ -159,11 +161,12 @@ State Machine 기반으로 로봇이 사전 정의된 상태(REST → PREGRASP �
 #### 🔹 최종 완성본 실행
 
 ```bash
-"$ISAACLAB_PATH/isaaclab.sh" -p day3/day3_2_pusht_teleop_collect_data_answer.py \
+cd day3
+python day3_2_pusht_teleop_collect_data_answer.py \
     --task Template-PushT-Franka-v0 \
     --teleop_device keyboard \
     --enable_cameras \
-    --dataset_file day3/datasets/tbar_pusht_teleop_practice.hdf5 \
+    --dataset_file datasets/tbar_pusht_teleop_practice.hdf5 \
     --num_demos 50
 ```
 
@@ -173,7 +176,8 @@ State Machine 기반으로 로봇이 사전 정의된 상태(REST → PREGRASP �
 |----|------|
 | `W` / `S` | X축 이동 |
 | `A` / `D` | Y축 이동 |
-| `Z` / `X` | Yaw 회전 |
+| `Q` / `E` | Z축 이동 |
+| `C` / `V` | Yaw 회전 |
 | `R` | 현재 에피소드 버리고 리셋 |
 
 > **성공 조건**: T-bar 위치 오차 < **1cm** AND Yaw 오차 < **0.1 rad** 상태가 15스텝 연속 유지
