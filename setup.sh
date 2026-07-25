@@ -19,6 +19,105 @@ ZIP_DIR="data/_zips"
 DAY3_DATASET_ID="1dxN5yS4Ixa45hXilRxHyFdi0T4-aYCJZ"
 DAY3_DATASET_NAME="tbar_pickplace_teleop_0719_240x320.hdf5"
 
+# ------------------------------------------------------------------
+# day3 diffusion policy 학습 완료 체크포인트 -> day3/robomimic/diffusion_policy_trained_models/
+#   (day3_5_eval_pickplace.sh 가 robomimic/diffusion_policy_trained_models/... 를 참조)
+#
+# 80명이 동시에 gdown 하면 Google Drive 의 파일당 24h 다운로드 쿼터에 걸려
+# "Too many users have downloaded this file recently" 로 실패한다. 이를 완화하기 위해:
+#   1) 미러 우선   : CKPT_MIRROR_URL 이 있으면 쿼터 없는 미러에서 curl 로 받는다(권장·최선).
+#   2) 단일 zip    : CKPT_ZIP_ID(단일 diffusion_policy_trained_models.zip) 가 폴더보다 훨씬 안정적.
+#   3) 지연·재시도 : 동시 접속을 무작위 지연으로 분산 + 지수 백오프 재시도 + 이어받기.
+# 위 1),2) 를 비워두면 폴더 링크를 gdown --folder 로 받는다(동시성에 가장 취약, 폴백용).
+#
+# ▶ 강사 준비(권장): diffusion_policy_trained_models/ 를 zip 하나로 묶어
+#   (a) Google Drive 에 올리고 그 파일 ID 를 CKPT_ZIP_ID 에,
+#   (b) 쿼터 없는 미러(GitHub Release 에셋 / Hugging Face / 웹서버)에 올리고 직링크를 CKPT_MIRROR_URL 에.
+#   zip 최상위에 diffusion_policy_trained_models/ 디렉토리가 있어야 한다(그래야 day3/robomimic/ 로 바로 풀림).
+CKPT_MIRROR_URL="${CKPT_MIRROR_URL:-}"                                  # 예: https://github.com/gist-ailab/ailab-summer-school-2026/releases/download/v1/diffusion_policy_trained_models.zip
+CKPT_ZIP_ID="${CKPT_ZIP_ID:-}"                                         # 예: 단일 zip 의 Google Drive 파일 ID
+CKPT_FOLDER_ID="${CKPT_FOLDER_ID:-18qNEoygnG4YsnhFHJATnpX2jXhMzzW6Z}" # (폴백) 폴더 링크 ID
+CKPT_ZIP_NAME="diffusion_policy_trained_models.zip"
+DP_CKPT_DIR="day3/robomimic"                        # 여기로 압축 해제 -> day3/robomimic/diffusion_policy_trained_models/
+DP_CKPT_MARKER="$DP_CKPT_DIR/diffusion_policy_trained_models"          # 존재하면 이미 설치된 것으로 보고 건너뜀
+
+# 대량 동시 다운로드 대비 파라미터 (환경변수로 조정 가능)
+DL_MAX_RETRY="${DL_MAX_RETRY:-6}"       # 최대 재시도 횟수
+DL_STAGGER_MAX="${DL_STAGGER_MAX:-90}"  # 첫 시도 전 0..N 초 무작위 대기(동시성 분산). 0 이면 대기 없음
+
+# 동시에 몰리지 않도록 무작위 지연 (Google Drive 다운로드 직전 1회)
+_stagger() {
+    [ "${DL_STAGGER_MAX:-0}" -gt 0 ] || return 0
+    local s=$(( RANDOM % (DL_STAGGER_MAX + 1) ))
+    echo "    (동시 접속 분산) ${s}s 대기 후 시작..."
+    sleep "$s"
+}
+
+# download_single <file_id> <out_path> [mirror_url]
+#   mirror_url 이 있으면 우선 curl(쿼터 없음), 실패 시 Google Drive gdown 으로 폴백. 이어받기 지원.
+download_single() {
+    local id="$1" out="$2" mirror="${3:-}" attempt delay
+    if [ -f "$out" ]; then echo "    재사용: $(basename "$out")"; return 0; fi
+    mkdir -p "$(dirname "$out")"
+
+    if [ -n "$mirror" ]; then
+        for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+            echo "    미러 다운로드 (시도 $attempt/$DL_MAX_RETRY): $mirror"
+            if curl -fL --retry 3 --retry-delay 2 -C - -o "$out" "$mirror"; then
+                echo "    완료(미러): $(basename "$out")"; return 0
+            fi
+            delay=$(( 2 ** attempt + RANDOM % 5 ))
+            echo "    미러 실패. ${delay}s 후 재시도..."; sleep "$delay"
+        done
+        echo "    미러가 계속 실패 → Google Drive 로 폴백"
+    fi
+
+    _stagger
+    for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+        echo "    gdown (시도 $attempt/$DL_MAX_RETRY): $id"
+        if gdown --continue "$id" -O "$out"; then
+            echo "    완료(gdown): $(basename "$out")"; return 0
+        fi
+        delay=$(( 2 ** attempt + RANDOM % 10 ))
+        echo "    실패(쿼터/네트워크 가능). ${delay}s 후 재시도..."; sleep "$delay"
+    done
+    echo "ERROR: 다운로드 실패: $out"
+    echo "  Google Drive 쿼터일 수 있다. 잠시 후 다시 실행하거나 CKPT_MIRROR_URL(미러)을 설정하라."
+    return 1
+}
+
+# day3 학습 완료 체크포인트를 day3/robomimic/ 로 설치
+download_dp_ckpt() {
+    if [ -d "$DP_CKPT_MARKER" ]; then
+        echo "    재사용: $DP_CKPT_MARKER"
+        return 0
+    fi
+    mkdir -p "$DP_CKPT_DIR"
+    if [ -n "$CKPT_MIRROR_URL" ] || [ -n "$CKPT_ZIP_ID" ]; then
+        # 단일 zip 방식 (권장)
+        local zip="$ZIP_DIR/$CKPT_ZIP_NAME"
+        download_single "$CKPT_ZIP_ID" "$zip" "$CKPT_MIRROR_URL" || return 1
+        echo "    압축 해제: $CKPT_ZIP_NAME -> $DP_CKPT_DIR/"
+        unzip -qo "$zip" -d "$DP_CKPT_DIR"
+    else
+        # 폴더 방식 (폴백): gdown --folder 로 diffusion_policy_trained_models/ 를 통째로.
+        echo "    폴더 다운로드(gdown --folder) — 동시성에 취약. 가능하면 CKPT_ZIP_ID/CKPT_MIRROR_URL 사용을 권장."
+        _stagger
+        local attempt delay
+        for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+            echo "    gdown --folder (시도 $attempt/$DL_MAX_RETRY)"
+            if gdown --folder "https://drive.google.com/drive/folders/$CKPT_FOLDER_ID" -O "$DP_CKPT_MARKER"; then
+                return 0
+            fi
+            delay=$(( 2 ** attempt + RANDOM % 10 ))
+            echo "    폴더 다운로드 실패. ${delay}s 후 재시도..."; sleep "$delay"
+        done
+        echo "ERROR: 체크포인트 폴더 다운로드 실패"
+        echo "  Google Drive 쿼터일 수 있다. 잠시 후 다시 실행하거나 CKPT_MIRROR_URL(미러)을 설정하라."
+        return 1
+    fi
+}
+
 # 다운로드할 zip 들. "파일ID:파일명" 형식. 각 zip 은 unzip 시 data/<이름>/ 으로 풀린다.
 ZIPS=(
     "1U2Lx7C60gnC9REaJobkBmLk3KeOXJAlg:assets.zip"              # day2/day3 YCB 에셋 -> data/assets/
@@ -81,6 +180,9 @@ else
     gdown "$DAY3_DATASET_ID" -O "day3/datasets/$DAY3_DATASET_NAME"
 fi
 
+echo "==> day3 학습 완료 체크포인트 다운로드 -> $DP_CKPT_DIR/"
+download_dp_ckpt
+
 echo "==> Jupyter 커널 등록 (day1 노트북 실습용)"
 # 현재 conda 환경(isaaclab)을 노트북 커널로 등록. 등록해두면 VSCode/Jupyter 에서
 # 'isaaclab' 커널을 바로 선택할 수 있다. ipykernel 은 requirements.txt 에서 설치됨.
@@ -98,6 +200,7 @@ for d in data/handeye_data data/slam_map_data data/sam3_practice; do
     [ -d "$d" ] || { echo "    누락: $d"; missing=1; }
 done
 [ -f "day3/datasets/$DAY3_DATASET_NAME" ] || { echo "    누락: day3/datasets/$DAY3_DATASET_NAME"; missing=1; }
+[ -d "$DP_CKPT_MARKER" ] || { echo "    누락: $DP_CKPT_MARKER"; missing=1; }
 
 if [ "$missing" -ne 0 ]; then
     echo

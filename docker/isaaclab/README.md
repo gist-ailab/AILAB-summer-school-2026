@@ -15,6 +15,29 @@ cd /path/to/AILAB-summer-school-2026
 `data/checkpoint/sam3/sam3.1_multiplex.pt`에 압축 해제한다. SAM3는 이 로컬
 파일을 사용하므로 Hugging Face 로그인이나 토큰은 필요하지 않다.
 
+또한 day3 학습 완료 체크포인트(`diffusion_policy_trained_models`)를
+`day3/robomimic/`에 압축 해제한다(평가 스크립트 `day3_5_eval_pickplace.sh`가
+`robomimic/diffusion_policy_trained_models/...`를 참조). 이미지에 그대로 구워지므로
+빌드한 이미지를 `docker save`로 배포하면 수강생은 아무것도 다운로드하지 않는다
+(즉, 동시 다운로드 문제 자체가 없다).
+
+여러 머신에서 이미지를 **동시에 빌드**해 Google Drive의 파일당 다운로드 쿼터
+("Too many users have downloaded this file recently")에 걸릴 경우, 쿼터가 없는
+미러(GitHub Release 에셋 / Hugging Face / 웹서버)의 zip 직링크나 단일 zip의 Drive
+파일 ID를 빌드 인자로 넘길 수 있다. 비워두면 기본 폴더 링크를 사용한다.
+
+```bash
+# 미러(권장, curl·쿼터 없음). 없으면 단일 zip → 폴더 순으로 폴백.
+CKPT_MIRROR_URL="https://github.com/gist-ailab/AILAB-summer-school-2026/releases/download/v1/diffusion_policy_trained_models.zip" \
+  ./docker/isaaclab/build.sh
+
+# 또는 단일 zip 의 Google Drive 파일 ID
+CKPT_ZIP_ID="<drive_file_id>" ./docker/isaaclab/build.sh
+```
+
+zip 은 최상위에 `diffusion_policy_trained_models/` 디렉토리를 그대로 담아야
+`day3/robomimic/`로 바로 풀린다.
+
 Default image tag:
 
 ```text

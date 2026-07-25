@@ -186,7 +186,15 @@ RUN bash docker/isaaclab/setup_docker.sh deps
 RUN bash docker/isaaclab/setup_docker.sh robomimic
 
 # 3) Course data (asset/checkpoint zips + day3 demo hdf5) baked in.
-RUN bash docker/isaaclab/setup_docker.sh data
+#    The day3 trained checkpoint (-> day3/robomimic/diffusion_policy_trained_models/)
+#    is fetched here too. By default it uses the Google Drive folder, which is fine for
+#    a single image build. To avoid Drive's per-file quota (e.g. many machines building
+#    at once), pass a no-quota mirror or a single-zip Drive id via --build-arg
+#    (see docker/isaaclab/README.md). Empty defaults keep the Drive-folder fallback.
+ARG CKPT_MIRROR_URL=""
+ARG CKPT_ZIP_ID=""
+RUN CKPT_MIRROR_URL="${CKPT_MIRROR_URL}" CKPT_ZIP_ID="${CKPT_ZIP_ID}" \
+    bash docker/isaaclab/setup_docker.sh data
 
 # Smoke-test the extra project dependencies used in later lectures.
 RUN python -c "import cv2, open3d, pycocotools; import graspnetAPI; print('Project dependencies import OK')"

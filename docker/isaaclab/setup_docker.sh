@@ -25,6 +25,84 @@ ZIP_DIR="data/_zips"
 DAY3_DATASET_ID="1dxN5yS4Ixa45hXilRxHyFdi0T4-aYCJZ"
 DAY3_DATASET_NAME="tbar_pickplace_teleop_0719_240x320.hdf5"
 
+# day3 diffusion policy trained checkpoint -> day3/robomimic/diffusion_policy_trained_models/
+# 80 concurrent gdown -> Google Drive per-file 24h quota ("Too many users ... downloaded ...").
+# Mitigation: mirror-first (curl, no quota) -> single zip (far more robust than a folder)
+#             -> random stagger + exponential-backoff retry + resume. Folder link is the fragile fallback.
+# Instructor: zip diffusion_policy_trained_models/ (top-level dir kept), upload to a no-quota mirror
+#             (GitHub Release / HF / web) -> CKPT_MIRROR_URL, and to Drive -> CKPT_ZIP_ID.
+CKPT_MIRROR_URL="${CKPT_MIRROR_URL:-}"
+CKPT_ZIP_ID="${CKPT_ZIP_ID:-}"
+CKPT_FOLDER_ID="${CKPT_FOLDER_ID:-18qNEoygnG4YsnhFHJATnpX2jXhMzzW6Z}"
+CKPT_ZIP_NAME="diffusion_policy_trained_models.zip"
+DP_CKPT_DIR="day3/robomimic"
+DP_CKPT_MARKER="$DP_CKPT_DIR/diffusion_policy_trained_models"
+DL_MAX_RETRY="${DL_MAX_RETRY:-6}"
+# Image build is a single download, so no stagger by default. Set >0 only if many
+# machines build the image at the same time (then they de-sync the Drive requests).
+DL_STAGGER_MAX="${DL_STAGGER_MAX:-0}"
+
+_stagger() {
+    [ "${DL_STAGGER_MAX:-0}" -gt 0 ] || return 0
+    local s=$(( RANDOM % (DL_STAGGER_MAX + 1) ))
+    echo "    (stagger) waiting ${s}s to de-sync concurrent clients..."
+    sleep "$s"
+}
+
+# download_single <file_id> <out_path> [mirror_url]: mirror(curl) first, then Google Drive gdown; resume-capable.
+download_single() {
+    local id="$1" out="$2" mirror="${3:-}" attempt delay
+    if [ -f "$out" ]; then echo "    reuse: $(basename "$out")"; return 0; fi
+    mkdir -p "$(dirname "$out")"
+    if [ -n "$mirror" ]; then
+        for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+            echo "    mirror download (try $attempt/$DL_MAX_RETRY): $mirror"
+            if curl -fL --retry 3 --retry-delay 2 -C - -o "$out" "$mirror"; then
+                echo "    done (mirror): $(basename "$out")"; return 0
+            fi
+            delay=$(( 2 ** attempt + RANDOM % 5 ))
+            echo "    mirror failed. retry in ${delay}s..."; sleep "$delay"
+        done
+        echo "    mirror keeps failing -> falling back to Google Drive"
+    fi
+    _stagger
+    for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+        echo "    gdown (try $attempt/$DL_MAX_RETRY): $id"
+        if gdown --continue "$id" -O "$out"; then
+            echo "    done (gdown): $(basename "$out")"; return 0
+        fi
+        delay=$(( 2 ** attempt + RANDOM % 10 ))
+        echo "    failed (quota/network?). retry in ${delay}s..."; sleep "$delay"
+    done
+    echo "ERROR: download failed: $out (possible Drive quota; retry later or set CKPT_MIRROR_URL)"
+    return 1
+}
+
+download_dp_ckpt() {
+    if [ -d "$DP_CKPT_MARKER" ]; then echo "    reuse: $DP_CKPT_MARKER"; return 0; fi
+    mkdir -p "$DP_CKPT_DIR"
+    if [ -n "$CKPT_MIRROR_URL" ] || [ -n "$CKPT_ZIP_ID" ]; then
+        local zip="$ZIP_DIR/$CKPT_ZIP_NAME"
+        download_single "$CKPT_ZIP_ID" "$zip" "$CKPT_MIRROR_URL" || return 1
+        echo "    unzip: $CKPT_ZIP_NAME -> $DP_CKPT_DIR/"
+        unzip -qo "$zip" -d "$DP_CKPT_DIR"
+    else
+        echo "    folder download (gdown --folder) — fragile at scale; prefer CKPT_ZIP_ID/CKPT_MIRROR_URL"
+        _stagger
+        local attempt delay
+        for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+            echo "    gdown --folder (try $attempt/$DL_MAX_RETRY)"
+            if gdown --folder "https://drive.google.com/drive/folders/$CKPT_FOLDER_ID" -O "$DP_CKPT_MARKER"; then
+                return 0
+            fi
+            delay=$(( 2 ** attempt + RANDOM % 10 ))
+            echo "    folder download failed. retry in ${delay}s..."; sleep "$delay"
+        done
+        echo "ERROR: checkpoint folder download failed (possible Drive quota; retry later or set CKPT_MIRROR_URL)"
+        return 1
+    fi
+}
+
 # "파일ID:파일명". 각 zip 은 unzip 시 최상위에 자기 이름의 디렉토리를 갖는다 (-> data/<이름>/).
 ZIPS=(
     "1U2Lx7C60gnC9REaJobkBmLk3KeOXJAlg:assets.zip"        # day2/day3 YCB assets -> data/assets/
@@ -90,6 +168,9 @@ do_data() {
         gdown "$DAY3_DATASET_ID" -O "day3/datasets/$DAY3_DATASET_NAME"
     fi
 
+    echo "==> day3 trained checkpoint -> $DP_CKPT_DIR/"
+    download_dp_ckpt
+
     rm -rf "$ZIP_DIR"
 }
 
@@ -106,6 +187,7 @@ do_verify() {
     [ -d "data/PennFudanPed/PNGImages" ] || { echo "    MISSING: data/PennFudanPed/PNGImages"; missing=1; }
     for d in data/handeye_data data/slam_map_data data/sam3_practice; do [ -d "$d" ] || { echo "    MISSING: $d"; missing=1; }; done
     [ -f "day3/datasets/$DAY3_DATASET_NAME" ] || { echo "    MISSING: day3/datasets/$DAY3_DATASET_NAME"; missing=1; }
+    [ -d "$DP_CKPT_MARKER" ] || { echo "    MISSING: $DP_CKPT_MARKER"; missing=1; }
     if [ "$missing" -ne 0 ]; then
         echo "데이터가 온전하지 않다. 직접 받아 data/ 에 배치할 것: $DRIVE_URL"
         exit 1
