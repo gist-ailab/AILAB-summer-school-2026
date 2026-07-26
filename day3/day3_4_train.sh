@@ -16,14 +16,25 @@
 
 set -euo pipefail
 
-if [ $# -lt 2 ]; then
+# 위치 인자(<config> <dataset>) 와 named 플래그(--config/--dataset) 를 모두 받는다.
+CONFIG=""; DATASET=""; EXTRA=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config)  CONFIG="$2";  shift 2;;
+        --dataset) DATASET="$2"; shift 2;;
+        *)
+            if   [ -z "$CONFIG" ];  then CONFIG="$1";  shift
+            elif [ -z "$DATASET" ]; then DATASET="$1"; shift
+            else EXTRA+=("$1"); shift; fi;;
+    esac
+done
+
+if [ -z "$CONFIG" ] || [ -z "$DATASET" ]; then
     echo "사용법: ./train.sh <config.json> <dataset.hdf5> [train.py 추가인자...]"
+    echo "   또는: ./train.sh --config <config.json> --dataset <dataset.hdf5>"
     exit 2
 fi
-
-CONFIG="$1"
-DATASET="$2"
-shift 2
+set -- ${EXTRA[@]+"${EXTRA[@]}"}
 
 PY="${PYTHON:-python}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

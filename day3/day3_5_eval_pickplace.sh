@@ -16,7 +16,7 @@
 #     robomimic/diffusion_policy_trained_models/pickplace/tbar_dp_teleop10_aug40/20260721032044
 #
 #   # 예2) 단일 체크포인트를 n=50 으로 평가
-#   bash run_eval_pickplace.sh <...>/models/model_epoch_450.pth 50
+#   bash day3_5_eval_pickplace.sh <...>/models/model_epoch_450.pth 50
 #
 # 환경 변수(선택):
 #   EVAL_SEED      초기 배치 고정 시드 (기본: 1000)
@@ -32,7 +32,7 @@ EVAL_SCRIPT="day3_5_eval_answer.py"
 TARGET="${1:?사용법: bash day3_5_eval_pickplace.sh <run_dir|ckpt.pth> [num_rollouts]}"
 N="${2:-20}"
 SEED="${EVAL_SEED:-1000}"
-STEPS="${MAX_STEPS:-300}"
+STEPS="${MAX_STEPS:-600}"
 
 # DDIM 옵션(선택)
 EXTRA=()
@@ -63,7 +63,7 @@ for CKPT in "${CKPTS[@]}"; do
         --checkpoint "$CKPT" \
         --num_rollouts "$N" \
         --max_steps "$STEPS" \
-        --eval_seed "$SEED" 
+        --eval_seed "$SEED" \
         "${EXTRA[@]}" \
         2>&1 | tr '\r' '\n' | grep -E "obs_encoding|Obs camera|경고|Success Rate|Results log"
 done

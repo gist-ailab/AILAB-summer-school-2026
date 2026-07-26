@@ -131,13 +131,18 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         joint_pos = ObsTerm(func=base_mdp.joint_pos)
         joint_vel = ObsTerm(func=base_mdp.joint_vel)
+        # normalize=False 로 수집한다: 카메라가 uint8 [0,255] RGB 를 그대로 내보낸다.
+        #   base_mdp.image 의 기본값은 normalize=True(RL 용: rgb/255 - 평균 → float)이며,
+        #   이 경우 robomimic 학습을 위해 day3_4.99 로 float32→uint8 변환이 필요해진다.
+        #   normalize=False 로 두면 그 dtype 변환 단계가 아예 불필요하다.
+        #   (해상도 축소가 필요하면 day3_4.99 의 resize 만 쓰면 된다 — dtype 변환과 별개.)
         wrist_cam = ObsTerm(
             func=base_mdp.image,
-            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb"},
+            params={"sensor_cfg": SceneEntityCfg("camera"), "data_type": "rgb", "normalize": False},
         )
         top_cam = ObsTerm(
             func=base_mdp.image,
-            params={"sensor_cfg": SceneEntityCfg("top_camera"), "data_type": "rgb"},
+            params={"sensor_cfg": SceneEntityCfg("top_camera"), "data_type": "rgb", "normalize": False},
         )
 
         def __post_init__(self):
