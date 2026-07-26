@@ -104,6 +104,26 @@ _unzip_inner_zips() {
     shopt -u nullglob
 }
 
+# Robustly fetch a large hdf5: resume (--continue) + retry + integrity (h5py open).
+# A truncated/corrupt file is never reused; if it still won't open, fail (so a broken
+# dataset is not silently baked into the image).
+download_hdf5() {
+    local id="$1" out="$2" attempt
+    for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+        if [ -f "$out" ] && python -c "import h5py,sys; h5py.File(sys.argv[1],'r').close()" "$out" >/dev/null 2>&1; then
+            echo "    integrity OK, reuse: $(basename "$out")"; return 0
+        fi
+        echo "    download/resume (try $attempt/$DL_MAX_RETRY): $(basename "$out")"
+        gdown --continue "$id" -O "$out" || true
+    done
+    if [ -f "$out" ] && python -c "import h5py,sys; h5py.File(sys.argv[1],'r').close()" "$out" >/dev/null 2>&1; then
+        echo "    integrity OK: $(basename "$out")"; return 0
+    fi
+    echo "ERROR: dataset truncated or corrupt (integrity check failed): $out"
+    echo "  Drive quota/network may have cut the download; retry later."
+    return 1
+}
+
 download_dp_ckpt() {
     if _ckpt_extracted; then echo "    reuse: $DP_CKPT_MARKER"; return 0; fi
     mkdir -p "$DP_CKPT_DIR"
@@ -191,13 +211,9 @@ do_data() {
         fi
     done
 
-    echo "==> day3 demo dataset (~3.6GB)"
+    echo "==> day3 demo dataset (large hdf5)"
     mkdir -p day3/datasets
-    if [ -f "day3/datasets/$DAY3_DATASET_NAME" ]; then
-        echo "    reuse: $DAY3_DATASET_NAME"
-    else
-        gdown "$DAY3_DATASET_ID" -O "day3/datasets/$DAY3_DATASET_NAME"
-    fi
+    download_hdf5 "$DAY3_DATASET_ID" "day3/datasets/$DAY3_DATASET_NAME" || exit 1
 
     echo "==> day3 trained checkpoint -> $DP_CKPT_DIR/"
     download_dp_ckpt

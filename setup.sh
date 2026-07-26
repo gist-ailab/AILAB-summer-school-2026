@@ -112,6 +112,25 @@ _unzip_inner_zips() {
     shopt -u nullglob
 }
 
+# 대용량 hdf5 를 이어받기(--continue)+재시도+무결성(h5py open) 검증으로 안전하게 받는다.
+# 잘린/손상 파일은 재사용하지 않고 다시 받으며, 끝내 열리지 않으면 실패한다(이미지에 잘린 파일이 구워지는 것 방지).
+download_hdf5() {
+    local id="$1" out="$2" attempt
+    for attempt in $(seq 1 "$DL_MAX_RETRY"); do
+        if [ -f "$out" ] && python -c "import h5py,sys; h5py.File(sys.argv[1],'r').close()" "$out" >/dev/null 2>&1; then
+            echo "    무결성 통과, 재사용: $(basename "$out")"; return 0
+        fi
+        echo "    다운로드/이어받기 (시도 $attempt/$DL_MAX_RETRY): $(basename "$out")"
+        gdown --continue "$id" -O "$out" || true
+    done
+    if [ -f "$out" ] && python -c "import h5py,sys; h5py.File(sys.argv[1],'r').close()" "$out" >/dev/null 2>&1; then
+        echo "    무결성 통과: $(basename "$out")"; return 0
+    fi
+    echo "ERROR: 데이터셋이 잘렸거나 손상됨(무결성 실패): $out"
+    echo "  Google Drive 쿼터/네트워크로 다운로드가 끊겼을 수 있다. 잠시 후 다시 실행하라."
+    return 1
+}
+
 # day3 학습 완료 체크포인트를 day3/robomimic/ 로 설치
 download_dp_ckpt() {
     if _ckpt_extracted; then
@@ -204,13 +223,9 @@ done
 # day1 노트북들은 day1/ 에서 실행되며 './data' 를 참조하므로, 루트 data/ 로 링크해준다.
 ln -sfn ../data day1/data
 
-echo "==> day3 데모 데이터셋 다운로드 (약 3.6GB)"
+echo "==> day3 데모 데이터셋 다운로드 (대용량 hdf5)"
 mkdir -p day3/datasets
-if [ -f "day3/datasets/$DAY3_DATASET_NAME" ]; then
-    echo "    받아둔 파일 재사용: $DAY3_DATASET_NAME"
-else
-    gdown "$DAY3_DATASET_ID" -O "day3/datasets/$DAY3_DATASET_NAME"
-fi
+download_hdf5 "$DAY3_DATASET_ID" "day3/datasets/$DAY3_DATASET_NAME" || exit 1
 
 echo "==> day3 학습 완료 체크포인트 다운로드 -> $DP_CKPT_DIR/"
 download_dp_ckpt
