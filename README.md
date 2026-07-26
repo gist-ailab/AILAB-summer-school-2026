@@ -116,7 +116,7 @@ code --no-sandbox --disable-gpu --user-data-dir=/tmp/vscode-root
 docker start -ai ailab-isaaclab
 ```
 
-자세한 내용은 [Docker 설치 안내](docker/isaaclab/README.md)를 참고합니다.
+배포된 이미지를 받아 실행하는 방법은 [docker/isaaclab/QUICKSTART.md](docker/isaaclab/QUICKSTART.md)를 참고합니다.
 
 ## 3. DGX Spark
 
